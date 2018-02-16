@@ -4,6 +4,7 @@ import os
 import re
 from pathlib import Path
 from collections import defaultdict
+import copy
 
 
 re_slack_link = re.compile(r'(?P<all><(?P<id>[^\|]*)(\|(?P<title>[^>]*))?>)')
@@ -16,6 +17,9 @@ def _read_json_dict(filename, key='id'):
             for record in records
         }
     return json_dict
+
+
+EOU_TOKEN = "__eou__"
 
 
 class SlackLoader2:
@@ -35,6 +39,10 @@ class SlackLoader2:
         self.channels = _read_json_dict(os.path.join(export_path, 'channels.json'))
         self.users = _read_json_dict(os.path.join(export_path, 'users.json'))
         self.messages = self.load_export(export_path, is_sorted)
+        self.threads_index = None
+        self.threads = None
+        self.index_threads()
+        self.rip_threads()
 
     def get_reactions(self, msg):
         if msg['type'] == 'message' and msg.get('subtype') is None:
@@ -81,23 +89,80 @@ class SlackLoader2:
             messages = sorted(messages, key=lambda x: x['ts'])
         return messages
 
-    def find_threads(self):
+    def index_threads(self):
         dd = defaultdict(list)
         for i in range(0, len(self.messages)):
             msg = self.messages[i]
             if "thread_ts" in msg:
                 key = (msg["channel"], msg["thread_ts"])
                 dd[key].append(i)
-        return dd
-        #return list(dd.values())
+        self.threads_index = dd
 
-    def rip_threads(self, thread_index):
-        threads = []
+    def get_text(self, msg):
+        keys = ["text", "plain_text"]
+        att_keys = ["text", "more"]
+        text = None
+        for key in keys:
+            if (key in msg) and msg[key] and (len(msg[key]) > 0):
+                text = msg[key]
+                break
+        if "attachments" in msg:
+            att_texts = []
+            for att in msg["attachments"]:
+                for att_key in att_keys:
+                    if (att_key in att) and (len(att[att_key]) > 0):
+                        att_texts.append(att[att_key] + EOU_TOKEN)
+            if not text:
+                text = " ".join(att_texts)
+            else:
+                text += " ".join(att_texts)
+        return text
+
+    def rip_threads(self):
+        processed_ids = []
+        if not self.threads:
+            self.threads = []
         for i in range(0, len(self.messages)):
+            if i in processed_ids:
+                continue
             msg = self.messages[i]
+            if "text" not in msg:
+                continue
+            thread = {}
             key = (msg["channel"], msg["ts"])
-            for submsg_index in thread_index[key]:
+            thread["key"] = key
+            text = self.get_text(msg)
+            if text:
+                thread["text"] = " ".join([text, EOU_TOKEN])
+            else:
+                thread["text"] = ""
+                print("Empty text {}".format(msg))
+            thread["msg_counter"] = 1
+            if "reactions_" in msg and msg["reactions_"]:
+                thread["reactions_"] = msg["reactions_"]
+                self.threads.append(copy.deepcopy(thread))
+            last_ts = datetime.datetime.fromtimestamp(msg['ts'])
+            processed_ids.append(i)
+            for submsg_index in self.threads_index[key]:
                 submsg = self.messages[submsg_index]
+                submsg_ts = datetime.datetime.fromtimestamp(submsg['ts'])
+                if submsg_ts < last_ts:
+                    raise Exception("""Wrong order in timestamps. submsg_ts {}\n\n
+                                     last_msg {}\n\n submsg {}\n\n msg {}"""
+                                    .format(submsg_ts, last_ts, submsg, msg))
+                last_ts = submsg_ts
+                thread["msg_counter"] += 1
+                subtext = self.get_text(submsg)
+                if subtext:
+                    thread["text"] += " ".join([subtext, EOU_TOKEN])
+                else:
+                    print("Empty text {}".format(submsg))
+                #TODO rip attachment
+                if "reactions_" in submsg and submsg["reactions_"]:
+                    thread["reactions_"] = submsg["reactions_"]
+                    self.threads.append(copy.deepcopy(thread))
+                processed_ids.append(i)
+
 
 
 
@@ -116,5 +181,5 @@ if __name__ == '__main__':
 
     loader = SlackLoader2(dir, exclude_channels=['_random_flood', 'career'])
     print(len(loader.messages))
-    threads = loader.find_threads()
-    type(threads)
+    print(len(loader.threads))
+    type(loader.threads)
