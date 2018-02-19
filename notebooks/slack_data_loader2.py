@@ -21,6 +21,7 @@ def _read_json_dict(filename, key='id'):
 
 
 EOU_TOKEN = "__eou__"
+REACTS_THRESHOLD = 3
 
 
 class SlackLoader2:
@@ -46,12 +47,14 @@ class SlackLoader2:
         self.rip_threads()
 
     @staticmethod
-    def get_reactions(msg):
+    def get_reactions(msg, threshold = REACTS_THRESHOLD):
         if msg['type'] == 'message' and msg.get('subtype') is None:
             msg_reacts = {}
             #react_texts.append(normalize_links(msg['text']))
             for record in msg.get('reactions', []):
-                msg_reacts[record['name']] = record['count']
+                if int(record['count']) >= threshold:
+                    name = record['name'].split("::")[0] #Remove skin-tone
+                    msg_reacts[name] = record['count']
             return msg_reacts if len(msg_reacts) > 0 else None
         return None
 
@@ -87,6 +90,7 @@ class SlackLoader2:
                             record['ts'] = float(record['ts'])
                             record['dt'] = datetime.datetime.fromtimestamp(record['ts'])
                         record['channel'] = channel_id
+                        record['channel_name'] = channel["name"]
                         if 'reactions' in record:
                             record['reactions_'] = self.get_reactions(record)
                         messages.append(record)
@@ -148,13 +152,17 @@ class SlackLoader2:
             thread["msg_counter"] = 1
             last_ts = datetime.datetime.fromtimestamp(msg['ts'])
             thread["start_ts"] = last_ts
+            thread["channel_name"] = msg["channel_name"]
 
-            if "reactions_" in msg and msg["reactions_"]:
+            #Save thread
+            if ("reactions_" in msg) and (msg["reactions_"]):
                 thread["reactions_"] = msg["reactions_"]
                 self.threads.append(copy.deepcopy(thread))
 
             processed_ids.append(i)
             for submsg_index in self.threads_index[self.key_str(key)]:
+                if submsg_index in processed_ids:
+                    continue
                 submsg = self.messages[submsg_index]
                 submsg_ts = datetime.datetime.fromtimestamp(submsg['ts'])
                 if submsg_ts < last_ts:
@@ -169,11 +177,13 @@ class SlackLoader2:
                 else:
                     print("Empty text {}".format(submsg))
                 #TODO rip attachment
+                #Save thread
                 if "reactions_" in submsg and submsg["reactions_"]:
                     thread["reactions_"] = submsg["reactions_"]
                     thread["end_ts"] = submsg_ts
+                    thread["last_msg"] = subtext
                     self.threads.append(copy.deepcopy(thread))
-                processed_ids.append(i)
+                processed_ids.append(submsg_index)
 
 
 
