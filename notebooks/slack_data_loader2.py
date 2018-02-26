@@ -30,6 +30,9 @@ class SlackLoader2:
                  is_sorted=True):
         self.exclude_channels = exclude_channels
         self.only_channels = only_channels
+        self.threads_index = None
+        self.threads = None
+        self.text_messages = None
         if start_date:
             self.start_date = (start_date - datetime.datetime(1970, 1, 1)).total_seconds()
         else:
@@ -41,10 +44,6 @@ class SlackLoader2:
         self.channels = _read_json_dict(os.path.join(str(export_path), 'channels.json'))
         self.users = _read_json_dict(os.path.join(str(export_path), 'users.json'))
         self.messages = self.load_export(export_path, is_sorted)
-        self.threads_index = None
-        self.threads = None
-        self.index_threads()
-        self.rip_threads()
 
     @staticmethod
     def get_reactions(msg, threshold = REACTS_THRESHOLD):
@@ -62,6 +61,27 @@ class SlackLoader2:
     def key_str(key):
         return str(key[0]) + "/" + str(key[1])
 
+    @staticmethod
+    def get_text(msg):
+        keys = ["text", "plain_text"]
+        att_keys = ["text", "more"]
+        text = None
+        for key in keys:
+            if (key in msg) and msg[key] and (len(msg[key]) > 0):
+                text = msg[key]
+                break
+        if "attachments" in msg:
+            att_texts = []
+            for att in msg["attachments"]:
+                for att_key in att_keys:
+                    if (att_key in att) and att[att_key] and (len(att[att_key]) > 0):
+                        att_texts.append(att[att_key] + EOU_TOKEN)
+            if not text:
+                text = " ".join(att_texts)
+            else:
+                text += " ".join(att_texts)
+        return text
+
     def load_export(self, export_path, is_sorted=True):
         """
                 1) Link to parent message:
@@ -70,7 +90,7 @@ class SlackLoader2:
                 2) attachments[].text
         """
         messages = []
-        ref_to_id = {}
+        #ref_to_id = {}
         for channel_id, channel in self.channels.items():
             #if channel['is_archived']:
             #    continue
@@ -92,7 +112,9 @@ class SlackLoader2:
                         record['channel'] = channel_id
                         record['channel_name'] = channel["name"]
                         if 'reactions' in record:
-                            record['reactions_'] = self.get_reactions(record)
+                            record['reactions_'] = SlackLoader2.get_reactions(record)
+                        if 'text' in record:
+                            record['text_'] = SlackLoader2.get_text(record)
                         messages.append(record)
         if is_sorted:
             messages = sorted(messages, key=lambda x: x['ts'])
@@ -107,25 +129,6 @@ class SlackLoader2:
                 dd[self.key_str(key)].append(i)
         self.threads_index = dd
 
-    def get_text(self, msg):
-        keys = ["text", "plain_text"]
-        att_keys = ["text", "more"]
-        text = None
-        for key in keys:
-            if (key in msg) and msg[key] and (len(msg[key]) > 0):
-                text = msg[key]
-                break
-        if "attachments" in msg:
-            att_texts = []
-            for att in msg["attachments"]:
-                for att_key in att_keys:
-                    if (att_key in att) and att[att_key] and (len(att[att_key]) > 0):
-                        att_texts.append(att[att_key] + EOU_TOKEN)
-            if not text:
-                text = " ".join(att_texts)
-            else:
-                text += " ".join(att_texts)
-        return text
 
     def rip_threads(self):
         processed_ids = []
@@ -142,7 +145,7 @@ class SlackLoader2:
             key = (msg["channel"], msg["ts"])
             thread["key"] = key
 
-            text = self.get_text(msg)
+            text = SlackLoader2.get_text(msg)
             if text:
                 thread["text"] = " ".join([text, EOU_TOKEN])
             else:
@@ -184,6 +187,11 @@ class SlackLoader2:
                     thread["last_msg"] = subtext
                     self.threads.append(copy.deepcopy(thread))
                 processed_ids.append(submsg_index)
+
+    def process_threads(self):
+        self.index_threads()
+        self.rip_threads()
+
 
 
 
