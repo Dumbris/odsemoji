@@ -46,7 +46,7 @@ class SlackLoader2:
         self.messages = self.load_export(export_path, is_sorted)
 
     @staticmethod
-    def get_reactions(msg, threshold = REACTS_THRESHOLD):
+    def get_reactions(msg, threshold=REACTS_THRESHOLD):
         if msg['type'] == 'message' and msg.get('subtype') is None:
             msg_reacts = {}
             #react_texts.append(normalize_links(msg['text']))
