@@ -1,13 +1,18 @@
 from ufal.udpipe import Model, Pipeline, ProcessingError # pylint: disable=no-name-in-module
 import tqdm
 
-def get_pipeline(modelfile='/media/data/word2vec/ufal/udpipe-ud-2.0-170801/russian-syntagrus-ud-2.0-170801.udpipe'):
-    model = Model.load(modelfile)
-    pipeline = Pipeline(model, 'tokenize', Pipeline.DEFAULT, Pipeline.DEFAULT, 'conllu')
-    return pipeline
+
+def get_model(modelfile='/media/data/word2vec/ufal/udpipe-ud-2.0-170801/russian-syntagrus-ud-2.0-170801.udpipe'):
+    return Model.load(modelfile)
+
+
+def get_pipeline(model):
+    return Pipeline(model, 'tokenize', Pipeline.DEFAULT, Pipeline.DEFAULT, 'conllu')
+
 
 def text2tagged(lines):
-    pipeline = get_pipeline()
+    model = get_model()
+    pipeline = get_pipeline(model)
     processed_lines = []
     for line in tqdm.tqdm(lines):
         processed = pipeline.process(line)
