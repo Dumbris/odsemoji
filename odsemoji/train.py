@@ -12,6 +12,9 @@ from odsemoji.tokenization import text2tagged
 #Load pickled data
 
 #train_test_split
+
+#Filter :tada:, urls
+
 #tokenize, get word_index
 #prepare embedding
 #
