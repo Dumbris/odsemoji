@@ -2,6 +2,7 @@ from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
 from sklearn.pipeline import TransformerMixin
 from sklearn.base import BaseEstimator
+import numpy as np
 
 class TextsToSequences(Tokenizer, BaseEstimator, TransformerMixin):
     """ Sklearn transformer to convert texts to indices list
@@ -15,8 +16,6 @@ class TextsToSequences(Tokenizer, BaseEstimator, TransformerMixin):
 
     def transform(self, texts, y=None):
         return np.array(self.texts_to_sequences(texts))
-
-sequencer = TextsToSequences(num_words=max_features)
 
 
 class Padder(BaseEstimator, TransformerMixin):
@@ -45,8 +44,3 @@ class Padder(BaseEstimator, TransformerMixin):
         X[X > self.max_index] = 0
         return X
 
-padder = Padder(maxlen)
-
-print("Start fitting sequenser")
-sequencer.fit_on_texts(np.hstack([list_sentences_train, list_sentences_test]))
-len(sequencer.word_index)

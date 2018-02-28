@@ -102,6 +102,9 @@ class SlackLoader2:
             for messages_filename in messages_glob.glob('*.json'):
                 with open(str(messages_filename)) as f_messages:
                     for record in json.load(f_messages):
+                        if record.get('subtype') == 'bot_message':
+                            print("Skiped {}".format(record))
+                            continue
                         if 'ts' in record:
                             if self.start_date and float(record['ts']) < self.start_date:
                                 continue
